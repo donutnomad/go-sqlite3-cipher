@@ -4,58 +4,14 @@
 package main
 
 import (
-	"archive/zip"
 	"bufio"
-	"bytes"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
-	"time"
-
-	"github.com/PuerkitoBio/goquery"
 )
-
-func download(prefix string) (url string, content []byte, err error) {
-	year := time.Now().Year()
-
-	site := "https://www.sqlite.org/download.html"
-	//fmt.Printf("scraping %v\n", site)
-	doc, err := goquery.NewDocument(site)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	doc.Find("a").Each(func(_ int, s *goquery.Selection) {
-		if strings.HasPrefix(s.Text(), prefix) {
-			url = fmt.Sprintf("https://www.sqlite.org/%d/", year) + s.Text()
-		}
-	})
-
-	if url == "" {
-		return "", nil, fmt.Errorf("Unable to find prefix '%s' on sqlite.org", prefix)
-	}
-
-	fmt.Printf("Downloading %v\n", url)
-	resp, err := http.Get(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Ready Body Content
-	content, err = ioutil.ReadAll(resp.Body)
-	defer resp.Body.Close()
-	if err != nil {
-		return "", nil, err
-	}
-
-	return url, content, nil
-}
 
 func mergeFile(src string, dst string) error {
 	defer func() error {
@@ -107,22 +63,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Download Amalgamation
-	_, amalgamation, err := download("sqlite-amalgamation-")
-	if err != nil {
-		log.Fatalf("Failed to download: sqlite-amalgamation; %s", err)
-	}
+	// Use local files instead of downloading
+	srcDir := "TODO:local file"
 
-	// Download Source
-	//_, source, err := download("sqlite-src-")
-	//if err != nil {
-	//	log.Fatalf("Failed to download: sqlite-src; %s", err)
-	//}
-
-	// Create Amalgamation Zip Reader
-	rAmalgamation, err := zip.NewReader(bytes.NewReader(amalgamation), int64(len(amalgamation)))
-	if err != nil {
-		log.Fatal(err)
+	// Check if source directory exists
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		log.Fatalf("Source directory does not exist: %s", srcDir)
 	}
 
 	// Create Source Zip Reader
@@ -131,23 +77,27 @@ func main() {
 	//	log.Fatal(err)
 	//}
 
-	// Extract Amalgamation
-	for _, zf := range rAmalgamation.File {
-		var f *os.File
-		switch path.Base(zf.Name) {
-		case "sqlite3.c":
-			f, err = os.Create("../sqlite3-binding.c")
-		case "sqlite3.h":
-			f, err = os.Create("../sqlite3-binding.h")
-		case "sqlite3ext.h":
-			f, err = os.Create("../sqlite3ext.h")
-		default:
+	// Extract from local directory
+	filesToExtract := map[string]string{
+		"sqlite3.c":    "../sqlite3-binding.c",
+		"sqlite3.h":    "../sqlite3-binding.h",
+		"sqlite3ext.h": "../sqlite3ext.h",
+	}
+
+	for filename, outputPath := range filesToExtract {
+		srcPath := filepath.Join(srcDir, filename)
+
+		// Check if file exists
+		if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+			log.Printf("File not found: %s", srcPath)
 			continue
 		}
+
+		f, err := os.Create(outputPath)
 		if err != nil {
 			log.Fatal(err)
 		}
-		zr, err := zf.Open()
+		zr, err := os.Open(srcPath)
 		if err != nil {
 			log.Fatal(err)
 		}
