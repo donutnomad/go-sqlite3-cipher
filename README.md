@@ -179,6 +179,7 @@ go build -tags "icu json1 fts5 secure_delete"
 | Secure Delete (FAST) | sqlite_secure_delete_fast | For more information see [PRAGMA secure_delete](https://www.sqlite.org/pragma.html#pragma_secure_delete) |
 | Tracing / Debug | sqlite_trace | Activate trace functions |
 | User Authentication | sqlite_userauth | SQLite User Authentication see [User Authentication](#user-authentication) for more information. |
+| SQLCipher Encryption | sqlite_cipher | SQLCipher support for transparent AES encryption of SQLite databases. Requires OpenSSL development libraries. See [SQLCipher Support](#sqlcipher-support) for compilation instructions. |
 | Virtual Tables | sqlite_vtable | SQLite Virtual Tables see [SQLite Official VTABLE Documentation](https://www.sqlite.org/vtab.html) for more information, and a [full example here](https://github.com/mattn/go-sqlite3/tree/master/_example/vtable) |
 
 # Compilation
@@ -186,6 +187,94 @@ go build -tags "icu json1 fts5 secure_delete"
 This package requires the `CGO_ENABLED=1` environment variable if not set by default, and the presence of the `gcc` compiler.
 
 If you need to add additional CFLAGS or LDFLAGS to the build command, and do not want to modify this package, then this can be achieved by using the `CGO_CFLAGS` and `CGO_LDFLAGS` environment variables.
+
+## SQLCipher Support
+
+This package has been modified to support SQLCipher for database encryption. When using SQLCipher features, you need to install OpenSSL and set the appropriate environment variables during compilation.
+
+### Prerequisites
+
+Install OpenSSL development libraries:
+
+- **macOS (Homebrew):**
+  ```bash
+  brew install openssl@3
+  ```
+
+- **Ubuntu/Debian:**
+  ```bash
+  sudo apt-get install libssl-dev
+  ```
+
+- **Fedora/CentOS:**
+  ```bash
+  sudo yum install openssl-devel
+  ```
+
+### Building with SQLCipher
+
+When compiling your application with SQLCipher support, you must set the following environment variables to link against OpenSSL:
+
+**macOS (Homebrew):**
+```bash
+env CGO_CFLAGS="-I/opt/homebrew/opt/openssl@3/include" \
+    CGO_LDFLAGS="-L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto" \
+    go build -o main main.go
+```
+
+**Linux:**
+```bash
+env CGO_CFLAGS="-I/usr/include/openssl" \
+    CGO_LDFLAGS="-L/usr/lib -lssl -lcrypto" \
+    go build -o main main.go
+```
+
+**Note:** The exact paths may vary depending on your system and OpenSSL installation location. Adjust the paths accordingly.
+
+### Usage Example
+
+To use SQLCipher encryption, you need to set the database key using a PRAGMA statement after opening the database connection:
+
+```go
+package main
+
+import (
+    "database/sql"
+    "fmt"
+    _ "github.com/mattn/go-sqlite3"
+)
+
+func main() {
+    key := "your-encryption-key"
+
+    // Open database connection
+    db, err := sql.Open("sqlite3", "encrypted.db")
+    if err != nil {
+        panic(err)
+    }
+    defer db.Close()
+
+    // Set encryption key for SQLCipher
+    _, err = db.Exec(fmt.Sprintf("PRAGMA key = '%s'", key))
+    if err != nil {
+        panic(err)
+    }
+
+    // Now you can use the database normally
+    _, err = db.Exec("CREATE TABLE IF NOT EXISTS users (id INTEGER, name TEXT)")
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println("Database created and encrypted successfully!")
+}
+```
+
+**Important Notes:**
+- The PRAGMA key must be executed immediately after opening the database connection
+- The key must be set before accessing any data in the encrypted database
+- If the key is incorrect or not set, all database operations will fail
+- Always use a strong, unique encryption key for production databases
 
 ## Android
 
